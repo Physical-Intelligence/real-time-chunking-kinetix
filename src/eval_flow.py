@@ -125,15 +125,13 @@ def eval(
             ],
             axis=1,
         )
-        # throw away the first `execute_horizon` actions from the newly generated action chunk, to align it with the
-        # correct frame of reference for the next scan iteration
+        # Roll the executed window so the next RTC step keeps the last `action_chunk_size`
+        # actions from the combined previous + corrected chunks. Using only the tail of the
+        # newly generated chunk breaks prefix continuity (real-time-chunking-kinetix#9).
         next_action_chunk = jnp.concatenate(
-            [
-                next_action_chunk[:, config.execute_horizon :],
-                jnp.zeros((obs.shape[0], config.execute_horizon, policy.action_dim)),
-            ],
+            [action_chunk, next_action_chunk],
             axis=1,
-        )
+        )[:, config.execute_horizon : config.execute_horizon + policy.action_chunk_size]
         next_n = jnp.concatenate([n[config.execute_horizon :], jnp.zeros(config.execute_horizon, dtype=jnp.int32)])
         (rng, next_obs, next_env_state), (dones, env_states, infos) = jax.lax.scan(
             step, (rng, obs, env_state), action_chunk_to_execute.transpose(1, 0, 2)
